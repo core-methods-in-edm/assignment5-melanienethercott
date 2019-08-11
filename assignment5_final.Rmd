@@ -1,0 +1,89 @@
+---
+title: "assignment5_final"
+author: "Melanie Nethercott""
+date: "12/18/17"
+output: html_document
+---
+For this assignment we will be using data from the Assistments Intelligent Tutoring system. This system gives students hints based on how they perform on math problems. 
+
+#Install & call libraries
+```{r}
+install.packages("party", "rpart")
+library(rpart)
+library(party)
+```
+
+## Part I
+```{r}
+#The new data doesn't have the 'action' variable, so I'm using the old data for creating and plotting the classification tree.
+D1 <- read.csv("intelligent_tutor.csv", sep = ",", header = TRUE)
+```
+
+##Classification Tree
+First we will build a classification tree to predict which students ask a teacher for help, which start a new session, or which give up, based on whether or not the student completed a session (D1$complete) and whether or not they asked for hints (D1$hint.y). 
+```{r}
+#Notice the standard R notion for a formula X ~ Y
+c.tree <- rpart(action ~ hint.y + complete, method="class", data=D1) 
+
+#Look at the error of this tree
+printcp(c.tree)
+
+#Plot the tree (saved in doc)
+post(c.tree, file = "tree.ps", title = "Session Completion Action: 1 - Ask teacher, 2 - Start new session, 3 - Give up")
+```
+
+## Part II
+
+#Regression Tree
+
+We want to see if we can build a decision tree to help teachers decide which students to follow up with, based on students' performance in Assistments. We will create three groups ("teacher should intervene", "teacher should monitor student progress" and "no action") based on students' previous use of the system and how many hints they use. To do this we will be building a decision tree using the "party" package. The party package builds decision trees based on a set of statistical stopping rules.
+
+#Take a look at our outcome variable "score"
+```{r}
+hist(D1$score)
+```
+
+#Create a categorical outcome variable based on student score to advise the teacher using an "ifelse" statement
+```{r}
+D1$advice <- ifelse(D1$score <=0.4, "intervene", ifelse(D1$score > 0.4 & D1$score <=0.8, "monitor", "no action"))
+```
+
+#Build a decision tree that predicts "advice" based on how many problems students have answered before, the percentage of those problems they got correct and how many hints they required
+```{r}
+score_ctree <- ctree(factor(advice) ~ prior_prob_count + prior_percent_correct + hints, D1)
+```
+
+#Plot tree
+```{r}
+plot(score_ctree)
+```
+
+###Please interpret the tree, which two behaviors do you think the teacher should most closely pay attemtion to?
+
+Assuming we want the teacher to reach the largest number of at-risk students, we should suggest he/she pays closest attention to those behaviors which resulted in the largest proportion of students in the 'intervene' and the 'monitor' recommended action groups. The first behavior to focus on is students who ask for hints, and more specifically students who ask for more than 12 hints, since our tree shows almost all of the students displaying these behaviors need intervention or monitoring. The second behavior to focus on is students who ask for fewer than 12 hints and who also got fewer than (around) 60% of prior questions correct, as our dataset shows just over 80% of students demonstrating this behavior required intervention or monitoring. In short, the teacher should concentrate on students who ask for help and who also get a large proportion of questions in previous assessments wrong.
+
+#Test Tree
+Upload the data "intelligent_tutor_new.csv". This is a data set of a differnt sample of students doing the same problems in the same system. We can use the tree we built for the previous data set to try to predict the "advice" we should give the teacher about these new students. 
+
+```{r}
+#Upload new data
+D2 <- read.csv("intelligent_tutor_new.csv", sep = ",", header = TRUE)
+
+#Generate predicted advice for new students based on tree generated from old students
+D2$prediction <- predict(score_ctree, D2)
+``` 
+
+## Part III
+Compare the predicted advice with the actual advice that these studnts recieved. 
+```{r}
+#Add new column to the D2 dataframe with actual advice based on previous thresholds. 
+D2$advice <- ifelse(D2$score <=0.4, "intervene", ifelse(D2$score > 0.4 & D2$score <=0.8, "monitor", "no action"))
+
+#Create table showing the predicted actions with actual advice, for comparison.
+T1 <- table(D2$prediction, D2$advice)
+View(T1)
+```
+###What is the difference between the observed and predicted results?
+
+The table shows that for 84 of the students the predicted action was to monitor, but the actual action was to take no action, so in 84 cases the prediction model was incorrect. The matrix also shows that for 116 students the predicted action was to take no action, and the actual action was to take no action, so for 116 cases the prediction model was accurate. In no cases did the prediction model recommend intervention with the actual action also suggesting to take was no action. We can say that the prediction model was incorrect for 42% of the data. However, there is an issue in that in the new dataset, all the students had the same score of 100%. Aside from this indicating maybe the test design wasn't great, it also suggests that the prediction model suffered from overfitting.
+
